@@ -11,12 +11,6 @@
 
 namespace exchange {
 
-static constexpr std::size_t MAX_ORDERS = 1'000'000;
-
-// ---------------------------------------------------------------------------
-// Internal order representation
-// ---------------------------------------------------------------------------
-
 struct Order {
     uint64_t order_id;
     uint64_t user_id;

@@ -1,91 +1,82 @@
+// using pragma pack to ensure there is no compiler padding btw struct members to avoid latency. Incase of network packets, the struct size need not be aligned by multiple of 8 bytes
+// so no need of padding the struct members, and lower the bytes better the network/IPC latency.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
+#include <cassert>
 
 namespace exchange {
 
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
-enum class side : uint8_t {
+enum class Side : uint8_t {
     YES = 0,
     NO  = 1,
 };
 
-enum class action : uint8_t {
+enum class Action : uint8_t {
     SUBMIT = 0,
     CANCEL = 1,
 };
 
 enum class recieptType : uint8_t {
-    order_ack        = 0,
-    order_reject     = 1,
-    cancel_ack       = 2,
-    cancel_reject    = 3,
-    trade_fill       = 4,
-    self_trade       = 5,
-    snapshot_header  = 6,
-    snapshot_start   = 7,
-    snapshot_end     = 8,
+    ORDER_ACK        = 0,
+    ORDER_REJECT     = 1,
+    CANCEL_ACK       = 2,
+    CANCEL_REJECT    = 3,
+    TRADE_FILL       = 4,
+    SELF_TRADE       = 5,
+    SNAPSHOT_HEADER  = 6,
+    SNAPSHOT_START   = 7,
+    SNAPSHOT_END     = 8,
 };
-
-// ---------------------------------------------------------------------------
-// Wire-format structs — packed, little-endian, largest fields first
-// ---------------------------------------------------------------------------
 
 #pragma pack(push, 1)
 
 struct orderPacket {
-    uint64_t order_id;   // little-endian
-    uint64_t user_id;    // little-endian
-    uint64_t quantity;   // little-endian
-    uint8_t  price;
-    uint8_t  side;       // cast from enum side
-    uint8_t  action;     // cast from enum action
+    uint64_t order_id;
+    uint64_t user_id;
+    uint32_t quantity;
+    uint16_t  price;
+    Side  side;  
+    Action  action;
 };
+
+static_assert(sizeof(orderPacket) == 24, "orderPacket must be exactly 24 bytes");
 
 struct tradeReciept {
-    uint64_t maker_order_id;  // little-endian
-    uint64_t taker_order_id;  // little-endian
-    uint8_t  price;
-    uint8_t  recieptType;     // cast from enum recieptType
-    uint16_t _pad;
+    uint64_t maker_order_id;
+    uint64_t taker_order_id;
+    uint16_t  price;
+    recieptType type;
 };
 
-struct FillPacket {
-    uint64_t order_id;         // little-endian
-    uint64_t quantity_filled;  // little-endian
+static_assert(sizeof(tradeReciept) == 21, "tradeReciept must be exactly 22 bytes");
+
+struct fillPacket {
+    uint64_t order_id;
+    uint32_t quantity_filled;
 };
+
+static_assert(sizeof(fillPacket) == 12, "fillPacket must be exactly 12 bytes");
 
 struct snapshotHeader {
-    uint64_t entry_count;  // little-endian
-    uint64_t _pad;
+    uint32_t entry_count;
 };
 
+static_assert(sizeof(snapshotHeader) == 4, "snapshotHeader must be exactly 4 bytes");
+
 struct snapshotEntry {
-    uint64_t quantity;  // little-endian
-    uint8_t  price;
-    uint8_t  side;      // cast from enum side
-    uint16_t _pad;
+    uint32_t quantity;
+    uint16_t  price;
+    Side  side;
 };
+
+static_assert(sizeof(snapshotEntry) == 7, "snapshotEntry must be exactly 7 bytes");
 
 #pragma pack(pop)
 
-// ---------------------------------------------------------------------------
-// Market constants
-// ---------------------------------------------------------------------------
-
+static constexpr std::size_t MAX_ORDERS = 65536;
 static constexpr uint8_t  MIN_PRICE = 1;
 static constexpr uint8_t  MAX_PRICE = 99;
-
-
-static_assert(sizeof(orderPacket)    == 27, "orderPacket size mismatch");
-static_assert(sizeof(tradeReciept)   == 20, "tradeReciept size mismatch");
-static_assert(sizeof(FillPacket)     == 16, "FillPacket size mismatch");
-static_assert(sizeof(snapshotHeader) == 16, "snapshotHeader size mismatch");
-static_assert(sizeof(snapshotEntry)  == 12, "snapshotEntry size mismatch");
 
 } 
