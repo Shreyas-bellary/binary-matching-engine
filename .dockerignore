@@ -1,0 +1,34 @@
+# Build artifacts
+build/
+dist/
+*.o
+*.a
+engine
+
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# Git / IDE
+.git
+.gitignore
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+/tmp
+
+# Test artefacts
+coverage/
+
+# Docker meta
+docker-compose*.yml
+.dockerignore
