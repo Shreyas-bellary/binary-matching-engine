@@ -6,12 +6,12 @@
 
 namespace exchange {
 
-static [[nodiscard]] uint64_t nowNanos() noexcept {
+[[nodiscard]] static uint64_t nowNanos() noexcept {
     using namespace std::chrono;
     return static_cast<uint64_t>(duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count());
 }
 
-static [[nodiscard]] Event makeOrderEvent(recieptType type, uint64_t order_id, uint16_t price, uint32_t quantity) noexcept {
+[[nodiscard]] static Event makeOrderEvent(recieptType type, uint64_t order_id, uint16_t price, uint32_t quantity) noexcept {
     Event ev{};
     ev.type     = type;
     ev.quantity = quantity;
@@ -19,7 +19,7 @@ static [[nodiscard]] Event makeOrderEvent(recieptType type, uint64_t order_id, u
     return ev;
 }
 
-static [[nodiscard]] Event makeTradeEvent(recieptType type, uint64_t maker_id,
+[[nodiscard]] static Event makeTradeEvent(recieptType type, uint64_t maker_id,
                                    uint64_t taker_id, uint16_t price,
                                    uint32_t quantity) noexcept {
     Event ev{};
@@ -30,7 +30,7 @@ static [[nodiscard]] Event makeTradeEvent(recieptType type, uint64_t maker_id,
 }
 
 // remove a resting order from its price level and erase the level if it becomes empty
-static template <typename Book>
+template <typename Book>
 void eraseResting(Book& levels, Order* order) noexcept {
     auto level_it = levels.find(order->price);
     assert(level_it != levels.end() && "resting order's price level is missing");
@@ -189,7 +189,7 @@ void OrderBook::cancelOrder(uint64_t order_id, std::vector<Event>& out) {
 void OrderBook::snapshot(std::vector<Event>& out) const {
     
     const auto entry_count = static_cast<uint32_t>(bid_levels.size() + ask_levels.size());
-    
+
     Event header{};
     header.type = recieptType::SNAPSHOT_HEADER;
     header.payload.snapshot_header = snapshotHeader{entry_count};

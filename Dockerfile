@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 COPY CMakeLists.txt ./
 COPY include/ include/
-COPY src/main.cpp src/OrderBook.cpp src/MemoryPool.cpp src/
+COPY src/main.cpp src/OrderBook.cpp src/
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build --parallel "$(nproc)"
