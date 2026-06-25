@@ -8,9 +8,11 @@
 
 namespace exchange {
 
+// the core engine is a normal limit order book over a single (YES) contract which only knows BUY (bid) and SELL (ask). 
+// YES/NO prediction-market contract dimension is normalized away by the server gateway before orders reach the engine.
 enum class Side : uint8_t {
-    YES = 0,
-    NO  = 1,
+    BUY  = 0,
+    SELL = 1,
 };
 
 enum class Action : uint8_t {
@@ -26,7 +28,7 @@ enum class recieptType : uint8_t {
     TRADE_FILL       = 4,
     SELF_TRADE       = 5,
     SNAPSHOT_HEADER  = 6,
-    SNAPSHOT_START   = 7,
+    SNAPSHOT_DATA    = 7,
     SNAPSHOT_END     = 8,
 };
 
@@ -50,7 +52,7 @@ struct tradeReciept {
     recieptType type;
 };
 
-static_assert(sizeof(tradeReciept) == 21, "tradeReciept must be exactly 22 bytes");
+static_assert(sizeof(tradeReciept) == 19, "tradeReciept must be exactly 19 bytes");
 
 struct fillPacket {
     uint64_t order_id;
@@ -65,13 +67,13 @@ struct snapshotHeader {
 
 static_assert(sizeof(snapshotHeader) == 4, "snapshotHeader must be exactly 4 bytes");
 
-struct snapshotEntry {
+struct snapshotData {
     uint32_t quantity;
     uint16_t  price;
     Side  side;
 };
 
-static_assert(sizeof(snapshotEntry) == 7, "snapshotEntry must be exactly 7 bytes");
+static_assert(sizeof(snapshotData) == 7, "snapshotData must be exactly 7 bytes");
 
 #pragma pack(pop)
 
