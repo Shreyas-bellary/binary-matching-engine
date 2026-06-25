@@ -10,14 +10,15 @@ type Side      = "BUY" | "SELL";
 type OrderStatus = "open" | "partial" | "filled" | "cancelled";
 
 interface OrderState {
-  orderId:   string;
-  userId:    string;
-  contract:  Contract;
-  side:      Side;
-  price:     number;    
-  quantity:  number;
-  filledQty: number;
-  status:    OrderStatus;
+  orderId:      string;
+  userId:       string;
+  contract:     Contract;
+  side:         Side;
+  price:        number;  
+  quantity:     number;
+  filledQty:    number;
+  avgExecPrice?: number;
+  status:       OrderStatus;
 }
 
 const orders = new Map<string, OrderState>();
@@ -34,6 +35,19 @@ function normalize(side: Side, contract: Contract, price: number) {
 }
 
 const centsToDollars = (cents: number): number => cents / 100;
+
+// engine fills always execute at the maker's price
+function execPriceForOrder(order: OrderState, makerPriceYes: number): number {
+  return order.contract === "YES" ? makerPriceYes : 1 - makerPriceYes;
+}
+
+function recordFill(order: OrderState, execPrice: number, qty: number): void {
+  const prevQty = order.filledQty;
+  order.filledQty += qty;
+  order.avgExecPrice =
+    prevQty === 0 ? execPrice : ((order.avgExecPrice ?? 0) * prevQty + execPrice * qty) / order.filledQty;
+  order.status = order.filledQty >= order.quantity ? "filled" : "partial";
+}
 
 // monotonic user/order-id counter
 let nextId = 1n;
@@ -61,13 +75,15 @@ function encodePacket( orderId: bigint, userId: bigint, price: number, quantity:
 const RT = { ORDER_ACK: 0, ORDER_REJECT: 1, CANCEL_ACK: 2, CANCEL_REJECT: 3, TRADE_FILL: 4, SELF_TRADE: 5, SNAPSHOT_HEADER: 6,
              SNAPSHOT_DATA: 7, SNAPSHOT_END: 8 } as const;
 
-interface Fill { makerOrderId: string; price: number; quantity: number; }
+interface Fill { makerOrderId: string; makerPrice: number; quantity: number; }
+interface SelfTrade { makerOrderId: string; makerPrice: number; quantity: number; }
 interface DepthLevel { price: number; quantity: number; }
 interface ParsedBatch {
   ackType?:    number;
   ackOrderId?: string;
   ackQty?:     number;
   fills:       Fill[];
+  selfTrade?:  SelfTrade;
   bids:        DepthLevel[];
   asks:        DepthLevel[];
 }
@@ -83,22 +99,19 @@ function parseBatch(buf: Buffer): ParsedBatch {
     if (type <= RT.SELF_TRADE) {
       const makerOrderId = buf.readBigUInt64LE(off).toString(); off += 8;
       const takerOrderId = buf.readBigUInt64LE(off).toString(); off += 8;
-      const price        = buf.readUInt16LE(off); off += 2;
+      const priceCents   = buf.readUInt16LE(off); off += 2;
       off += 1; // redundant type byte inside tradeReciept
       const quantity     = buf.readUInt32LE(off); off += 4;
+      const makerPrice   = centsToDollars(priceCents);
 
       if (type === RT.ORDER_ACK || type === RT.ORDER_REJECT || type === RT.CANCEL_ACK || type === RT.CANCEL_REJECT) {
         result.ackType    = type;
         result.ackOrderId = takerOrderId;
         result.ackQty     = quantity;
+      } else if (type === RT.SELF_TRADE) {
+        result.selfTrade = { makerOrderId, makerPrice, quantity };
       } else {
-        // if fill trade or self trade, update maker state and collect fill
-        result.fills.push({ makerOrderId, price, quantity });
-        const maker = orders.get(makerOrderId);
-        if (maker) {
-          maker.filledQty += quantity;
-          maker.status = maker.filledQty >= maker.quantity ? "filled" : "partial";
-        }
+        result.fills.push({ makerOrderId, makerPrice, quantity });
       }
     } else if (type === RT.SNAPSHOT_HEADER) {
       off += 4; // entry_count not needed
@@ -203,14 +216,57 @@ app.post("/api/order", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    for (const fill of batch.fills) state.filledQty += fill.quantity;
-    state.status = state.filledQty === 0 ? "open" : state.filledQty >= quantity! ? "filled" : "partial";
+    const responseFills = batch.fills.map(f => {
+      const maker = orders.get(f.makerOrderId);
+      const makerPrice = maker ? execPriceForOrder(maker, f.makerPrice) : f.makerPrice;
+      const takerPrice = execPriceForOrder(state, f.makerPrice);
+
+      recordFill(state, takerPrice, f.quantity);
+      if (maker) recordFill(maker, makerPrice, f.quantity);
+
+      return {
+        makerOrderId: f.makerOrderId,
+        quantity: f.quantity,
+        makerPrice,
+        takerPrice,
+      };
+    });
+
+    if (batch.selfTrade) {
+      if (state.filledQty === 0) {
+        state.status = "cancelled";
+        res.status(422).json({
+          error: "self-trade prevented",
+          orderId: state.orderId,
+          status: state.status,
+          filledQty: 0,
+          blockedBy: batch.selfTrade.makerOrderId,
+        });
+        return;
+      }
+      state.status = "partial";
+      res.status(201).json({
+        orderId: state.orderId,
+        status: state.status,
+        filledQty: state.filledQty,
+        avgExecPrice: state.avgExecPrice,
+        fills: responseFills,
+        selfTradeBlocked: {
+          blockedBy: batch.selfTrade.makerOrderId,
+          blockedQty: batch.selfTrade.quantity,
+        },
+      });
+      return;
+    }
+
+    if (state.filledQty === 0) state.status = "open";
 
     res.status(201).json({
       orderId: state.orderId,
       status: state.status,
       filledQty: state.filledQty,
-      fills: batch.fills.map(f => ({ ...f, price: centsToDollars(f.price) })),
+      avgExecPrice: state.avgExecPrice,
+      fills: responseFills,
     });
   } catch {
     orders.delete(state.orderId);
