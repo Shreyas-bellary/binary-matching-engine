@@ -19,9 +19,7 @@ namespace exchange {
     return ev;
 }
 
-[[nodiscard]] static Event makeTradeEvent(recieptType type, uint64_t maker_id,
-                                   uint64_t taker_id, uint16_t price,
-                                   uint32_t quantity) noexcept {
+[[nodiscard]] static Event makeTradeEvent(recieptType type, uint64_t maker_id, uint64_t taker_id, uint16_t price, uint32_t quantity) noexcept {
     Event ev{};
     ev.type     = type;
     ev.quantity = quantity;

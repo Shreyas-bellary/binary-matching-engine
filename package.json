@@ -4,6 +4,7 @@
   "private": true,
   "description": "REST gateway for the binary-outcome matching engine",
   "main": "dist/server.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
